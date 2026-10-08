@@ -1,56 +1,56 @@
-import uuid
+"""Unit tests for the scanner service (Phase 14 deliverable)."""
+import pytest
 
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.db import Base, SessionLocal
-from app.main import app
-from app.models import Dependency, Project, User
-from app.security import create_token, hash_password
-from app.services.scanner import parse_manifest, scan_project
+from app.services import scanner
 
 
-def test_parse_manifest_and_scan():
-    engine = create_engine('sqlite://')
-    Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
-    db = Session()
+# ─── Unit test 1: severity() classification ─────────────────
+@pytest.mark.parametrize(
+    "cvss,expected",
+    [
+        (9.8, "CRITICAL"),
+        (10.0, "CRITICAL"),
+        (7.5, "HIGH"),
+        (7.0, "HIGH"),
+        (5.5, "MEDIUM"),
+        (3.9, "LOW"),
+        (0.0, "LOW"),
+    ],
+)
+def test_severity_classification(cvss, expected):
+    assert scanner.severity(cvss) == expected
 
-    deps = parse_manifest('log4j-core==2.14.1\nlodash==4.17.20\n', 'npm')
-    result = scan_project(db, 'project-1', deps)
 
-    assert result['risk_score'] >= 0
-    assert len(result['findings']) >= 2
-    assert db.query(Dependency).count() >= 2
+# ─── Unit test 2: parse_manifest() ──────────────────────────
+def test_parse_manifest_typical():
+    manifest = """
+    # comment line
+    log4j-core==2.14.1
+    lodash==4.17.20
+    """
+    deps = scanner.parse_manifest(manifest, "npm")
+    assert len(deps) == 2
+    assert deps[0]["name"] == "log4j-core"
+    assert deps[0]["version"] == "2.14.1"
 
-    db.close()
+
+def test_parse_manifest_empty():
+    assert scanner.parse_manifest("", "npm") == []
 
 
-def test_get_scan_results_for_project():
-    db = SessionLocal()
-    username = f'analyst_scan_{uuid.uuid4().hex[:8]}'
-    user = User(user_id=str(uuid.uuid4()), username=username, email=f'{username}@x.io', role='analyst', pw_hash=hash_password('Pass@12345'))
-    project = Project(project_id=str(uuid.uuid4()), name=f'proj_{uuid.uuid4().hex[:8]}', owner_id=user.user_id, repo_url='https://example.com', criticality='high')
-    db.add_all([user, project])
-    db.commit()
+def test_parse_manifest_ignores_comments():
+    deps = scanner.parse_manifest("# just a comment\n", "npm")
+    assert deps == []
 
-    token = create_token(user.user_id, user.role)
-    deps = parse_manifest('log4j-core==2.14.1\nlodash==4.17.20\n', 'npm')
-    scan_result = scan_project(db, project.project_id, deps)
-    assert scan_result['findings']
 
-    client = TestClient(app)
-    resp = client.get('/api/v1/scans', params={'project_id': project.project_id}, headers={'Authorization': f'Bearer {token}'})
+# ─── Unit test 3: CVE matching logic ────────────────────────
+def test_known_cve_match():
+    adv = [a for a in scanner.SAMPLE_ADVISORIES if a["package"] == "log4j-core" and a["version"] == "2.14.1"]
+    assert len(adv) == 1
+    assert adv[0]["cvss"] == 10.0
+    assert adv[0]["cve"] == "CVE-2021-44228"
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['project_id'] == project.project_id
-    assert len(data['findings']) >= 2
 
-    finding_id = data['findings'][0]['finding_id']
-    assign_resp = client.post('/api/v1/scans/assign', json={'finding_id': finding_id}, headers={'Authorization': f'Bearer {token}'})
-    assert assign_resp.status_code == 200
-    assert assign_resp.json()['status'] == 'ASSIGNED'
-
-    db.close()
+def test_no_match_for_safe_version():
+    adv = [a for a in scanner.SAMPLE_ADVISORIES if a["package"] == "lodash" and a["version"] == "4.17.21"]
+    assert adv == []

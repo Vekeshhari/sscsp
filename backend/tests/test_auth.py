@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
@@ -37,17 +38,28 @@ def test_seed_creates_demo_users():
 
 
 def test_analyst_can_create_project():
-    engine = create_engine('sqlite://')
+    engine = create_engine(
+        'sqlite://',
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
-    db = Session()
 
+    db = Session()
     user = User(user_id='u-analyst', username='analyst2', email='analyst2@x.io', role='analyst', pw_hash=hash_password('Ana@12345'))
     db.add(user)
     db.commit()
 
+    def override_get_db():
+        session = Session()
+        try:
+            yield session
+        finally:
+            session.close()
+
     token = create_token(user.user_id, user.role)
-    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_db] = override_get_db
     client = TestClient(app)
     try:
         resp = client.post(

@@ -42,6 +42,27 @@ def parse_manifest(content: str, ecosystem: str) -> List[Dict]:
     return deps
 
 
+def parse_purl(purl: str) -> Dict:
+    """Very small PURL parser used for validation and fuzzing safety."""
+    if not isinstance(purl, str) or not purl.strip():
+        raise ValueError("PURL is required")
+
+    raw = purl.strip()
+    if not raw.startswith("pkg:"):
+        raise ValueError("Malformed PURL: missing pkg: scheme")
+
+    payload = raw[4:]
+    if not payload or "/" not in payload:
+        raise ValueError("Malformed PURL: missing namespace/name")
+
+    pkg = payload.split("/", 1)[1]
+    if "@" not in pkg and ":" not in pkg:
+        # Accept a package name without version to keep the parser permissive.
+        return {"type": payload.split("/", 1)[0], "name": pkg}
+
+    return {"type": payload.split("/", 1)[0], "name": pkg}
+
+
 def scan_project(db: Session, project_id: str, deps: List[Dict]) -> Dict:
     findings = []
     for d in deps:
