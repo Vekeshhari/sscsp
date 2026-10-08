@@ -1,0 +1,12 @@
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]   # allow assert in tests only
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "S", "B"]   # S = bandit rules, B = bugbear
+ignore = ["S101"]               # allow assert
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=app --cov-report=term-missing"

@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+*.md
+__pycache__
+*.pyc
+.venv
+node_modules
+dist
+.vscode
+.idea
+tests/

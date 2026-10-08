@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sscsp-db
+    environment:
+      POSTGRES_USER: sscsp
+      POSTGRES_PASSWORD: sscsp_dev_pw
+      POSTGRES_DB: sscsp
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sscsp"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: sscsp-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://sscsp:sscsp_dev_pw@db:5432/sscsp
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_prod}
+      BLOCK_CVSS: "7.0"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app:ro
+
+  frontend:
+    build: ./frontend
+    container_name: sscsp-frontend
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+
+volumes:
+  dbdata:

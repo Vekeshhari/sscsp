@@ -1,0 +1,16 @@
+{
+  "name": "sscsp",
+  "build": {
+    "dockerfile": "Dockerfile.dev"
+  },
+  "forwardPorts": [5173, 8000, 5432],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

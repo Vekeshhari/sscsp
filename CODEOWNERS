@@ -1,0 +1,5 @@
+# Sensitive paths require security team review
+/backend/app/security.py       @security-team
+/backend/app/services/signer.py @security-team
+/infra/                         @devops-team
+/.github/workflows/             @devops-team
